@@ -1,0 +1,6 @@
+.env
+output/
+rclone.conf
+*.xlsx
+__pycache__/
+*.pyc

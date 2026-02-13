@@ -1,0 +1,16 @@
+services:
+  overtime-report:
+    build: .
+    container_name: overtime-report
+    env_file: .env
+    volumes:
+      - ./output/real:/output/real
+      - ./output/office:/output/office
+      - ./rclone.conf:/root/.config/rclone/rclone.conf:ro
+    networks:
+      - solidtime_internal
+    restart: unless-stopped
+
+networks:
+  solidtime_internal:
+    external: true
