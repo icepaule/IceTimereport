@@ -9,6 +9,8 @@
 5. [Automatisierung](#automatisierung)
 6. [FAQ](#faq)
 
+> Detaillierte Erklärung aller Formeln und Algorithmen: [Berechnungslogik](CALCULATIONS.md)
+
 ---
 
 ## Überblick
@@ -266,7 +268,11 @@ Die **Jahressumme** ist identisch. Monatlich kann es Abweichungen geben, weil Wo
 
 ### Was passiert mit Urlaubs-/Krankheitstagen?
 
-Das Tool erkennt automatisch Solidtime-Projekte mit den Namen "Urlaub", "Krank" oder "Gleittag" und markiert die Tage entsprechend. Die Soll-Stunden werden trotzdem gezählt (= bezahlte Abwesenheit).
+Das Tool erkennt automatisch Solidtime-Projekte mit den Namen "Urlaub", "Krank" oder "Gleittag" und markiert die Tage entsprechend. Für diese Tage gilt: **Ist = Soll = hours_per_day** (z.B. 7,8h bei einer 39h-Woche). Damit haben Krankheits- und Urlaubstage keinen Einfluss auf das Überstundenkonto — sie werden als bezahlte Abwesenheit (Entgeltfortzahlung) behandelt.
+
+In der Büro-Version werden dafür fiktive Arbeitszeiten generiert (z.B. 08:00–15:48 bei 7,8h).
+
+Siehe [Berechnungslogik](CALCULATIONS.md) für Details und Beispielrechnungen.
 
 ### Kann ich mehrere Jahre generieren?
 
@@ -294,4 +300,4 @@ Die Pausenzeiten sind **fiktiv** und werden nach ArbZG-Mindestvorgaben berechnet
 - 6-9h: 30 Minuten
 - \> 9h: 45 Minuten
 
-Die reale Version prüft deine tatsächlichen Pausen (Lücken zwischen Solidtime-Einträgen).
+Die reale Version prüft deine tatsächlichen Pausen (Lücken zwischen Solidtime-Einträgen). Wenn du pro Tag nur **einen durchgehenden Eintrag** buchst, wird keine Pausenprüfung durchgeführt — denn ohne Lücken zwischen Einträgen ist eine Messung nicht möglich.

@@ -26,7 +26,10 @@ Dieses Tool liest Zeiteinträge aus einer lokalen Solidtime-Installation (Postgr
 - Wochenend-/Feiertagsstunden → auf nächsten Werktag verschoben
 - Max. 10h/Tag, Überschuss → Carry-Over auf Folgetage
 - Fiktive Start-/End-/Pausenzeiten (Start 08:00)
+- Bezahlte Abwesenheit (Urlaub/Krank/Gleittag) → Ist = Soll = hours_per_day
 - **Gesamtstunden bleiben erhalten** (nur Verteilung ändert sich)
+
+Siehe [Berechnungslogik](docs/CALCULATIONS.md) für eine detaillierte Erklärung aller Formeln.
 
 ## Features
 
@@ -71,6 +74,7 @@ ls -la output/real/ output/office/
 | Dokument | Inhalt |
 |----------|--------|
 | [Benutzerhandbuch](docs/USER.md) | Tägliche Nutzung, Konfiguration, FAQ |
+| [Berechnungslogik](docs/CALCULATIONS.md) | Detaillierte Erklärung aller Formeln und Algorithmen |
 | [Administratorhandbuch](docs/ADMIN.md) | Installation, Solidtime-Setup, E-Mail, rclone, Troubleshooting |
 
 ## Projektstruktur
@@ -98,6 +102,7 @@ overtime-report/
 │   └── office/             # Büro-Version
 └── docs/
     ├── USER.md             # Benutzerhandbuch
+    ├── CALCULATIONS.md     # Berechnungslogik (Formeln, Algorithmen, Beispiele)
     └── ADMIN.md            # Administratorhandbuch
 ```
 

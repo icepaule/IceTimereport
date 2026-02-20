@@ -53,8 +53,8 @@ def check_violations(days: list[DayInfo], state: str = "BY") -> list[DayInfo]:
         if day.actual_hours > 10:
             day.violations.append(f"§3 >10h ({day.actual_hours:.1f}h)")
 
-        # §4: Break requirements
-        if day.actual_hours > 6:
+        # §4: Break requirements (only check if multiple entries allow gap measurement)
+        if day.actual_hours > 6 and len(day.entries) >= 2:
             required_break = 45 if day.actual_hours > 9 else 30
             actual_break = _calculate_break_minutes(day.entries)
             if actual_break < required_break:
@@ -106,12 +106,13 @@ def _check_24week_average(days: list[DayInfo]):
                 last.violations.append(violation)
 
 
-def correct_for_office(days: list[DayInfo], state: str = "BY") -> list[CorrectedDay]:
+def correct_for_office(days: list[DayInfo], state: str = "BY", hours_per_day: float = 7.8) -> list[CorrectedDay]:
     """
     Produce ArbZG-compliant corrected version.
     - Weekend/holiday hours → carry over to next working day
     - Cap at 10h/day, excess → carry over
     - Generate plausible start/end/pause times
+    - Paid absence (Urlaub/Krank/Gleittag) → Ist = Soll = hours_per_day
     """
     corrected = []
     carry_over = 0.0
@@ -124,12 +125,13 @@ def correct_for_office(days: list[DayInfo], state: str = "BY") -> list[Corrected
         day_type = _detect_day_type(day)
 
         if day_type in ("Urlaub", "Krank", "Gleittag"):
+            start_time, end_time, pause_min = _generate_times(hours_per_day)
             corrected.append(CorrectedDay(
                 date=day.date,
-                corrected_hours=0,
-                start_time="",
-                end_time="",
-                pause_minutes=0,
+                corrected_hours=hours_per_day,
+                start_time=start_time,
+                end_time=end_time,
+                pause_minutes=pause_min,
                 day_type=day_type,
                 original_hours=day.actual_hours,
             ))
