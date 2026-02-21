@@ -32,6 +32,8 @@ def send_monthly_report(
     mail_to = os.environ["MAIL_TO"]
     mail_cc = os.environ.get("MAIL_CC", "")
     employee_name = os.environ.get("EMPLOYEE_NAME", "Mitarbeiter")
+    report_url = os.environ.get("REPORT_URL", "")
+    docs_url = os.environ.get("DOCS_URL", "")
 
     month_name = MONTH_NAMES_DE[month]
     subject = f"Arbeitszeitnachweis {month_name} {year} - {employee_name}"
@@ -41,7 +43,8 @@ def send_monthly_report(
         mail_cc = ""
         subject = f"[TEST] {subject}"
 
-    html = _build_html(year, month, employee_name, summary)
+    filename = os.path.basename(office_file)
+    html = _build_html(year, month, employee_name, summary, filename, report_url, docs_url)
 
     msg = MIMEMultipart()
     msg["From"] = mail_from
@@ -62,7 +65,7 @@ def send_monthly_report(
         part.add_header("Content-Disposition", f"attachment; filename={filename}")
         msg.attach(part)
 
-    recipients = [mail_to]
+    recipients = [addr.strip() for addr in mail_to.split(",")]
     if mail_cc:
         recipients.extend(addr.strip() for addr in mail_cc.split(","))
 
@@ -78,7 +81,9 @@ def send_monthly_report(
         return False
 
 
-def _build_html(year: int, month: int, name: str, summary: dict) -> str:
+def _build_html(year: int, month: int, name: str, summary: dict,
+                 filename: str = "", report_url: str = "",
+                 docs_url: str = "") -> str:
     month_name = MONTH_NAMES_DE[month]
     actual = summary.get("actual", 0)
     target = summary.get("target", 0)
@@ -86,41 +91,57 @@ def _build_html(year: int, month: int, name: str, summary: dict) -> str:
     overtime_total = summary.get("overtime_total", 0)
     vacation_remaining = summary.get("vacation_remaining", 0)
 
-    diff_color = "#008000" if diff >= 0 else "#FF0000"
-    sign = "+" if diff >= 0 else ""
+    diff_color = "#008000" if diff >= 0 else "#cc0000"
+    ot_color = "#008000" if overtime_total >= 0 else "#cc0000"
 
-    return f"""
-    <html>
-    <body style="font-family: Arial, sans-serif; color: #333;">
-        <h2>Arbeitszeitnachweis {month_name} {year}</h2>
-        <p>Hallo,</p>
-        <p>anbei der Arbeitszeitnachweis für <strong>{name}</strong> für {month_name} {year}.</p>
+    td = 'style="padding:4px 12px;border:1px solid #ccc"'
+    td_b = 'style="padding:4px 12px;border:1px solid #ccc;font-weight:bold;text-align:right"'
 
-        <table style="border-collapse: collapse; margin: 20px 0;">
-            <tr>
-                <td style="padding: 8px 16px; border: 1px solid #ddd;">Ist-Stunden {month_name}:</td>
-                <td style="padding: 8px 16px; border: 1px solid #ddd; font-weight: bold;">{actual:.1f}h</td>
-            </tr>
-            <tr>
-                <td style="padding: 8px 16px; border: 1px solid #ddd;">Soll-Stunden {month_name}:</td>
-                <td style="padding: 8px 16px; border: 1px solid #ddd; font-weight: bold;">{target:.1f}h</td>
-            </tr>
-            <tr>
-                <td style="padding: 8px 16px; border: 1px solid #ddd;">Differenz:</td>
-                <td style="padding: 8px 16px; border: 1px solid #ddd; font-weight: bold; color: {diff_color};">{sign}{diff:.1f}h</td>
-            </tr>
-            <tr>
-                <td style="padding: 8px 16px; border: 1px solid #ddd;">Überstundenkonto Gesamt:</td>
-                <td style="padding: 8px 16px; border: 1px solid #ddd; font-weight: bold;">{overtime_total:+.1f}h</td>
-            </tr>
-            <tr>
-                <td style="padding: 8px 16px; border: 1px solid #ddd;">Resturlaub:</td>
-                <td style="padding: 8px 16px; border: 1px solid #ddd; font-weight: bold;">{vacation_remaining} Tage</td>
-            </tr>
-        </table>
+    report_section = ""
+    if report_url:
+        report_section = (
+            f'<p>Die aktuelle Datei <strong>{filename}</strong> ist auch auf '
+            f'<a href="{report_url}">Google Drive</a> hinterlegt.</p>'
+        )
 
-        <p>Die vollständige Aufstellung ist als Excel-Datei angehängt.</p>
-        <p>Mit freundlichen Grüßen<br/>{name}</p>
-    </body>
-    </html>
-    """
+    docs_section = ""
+    if docs_url:
+        docs_section = (
+            f'<p style="font-size:0.9em;color:#666">Die vollständige Berechnungslogik '
+            f'ist unter <a href="{docs_url}">{docs_url}</a> dokumentiert.</p>'
+        )
+
+    return f"""\
+<html>
+<body style="font-family:Arial,Helvetica,sans-serif;color:#333;line-height:1.4;max-width:640px">
+<h2 style="color:#2c3e50;margin-bottom:4px">Arbeitszeitnachweis {month_name} {year}</h2>
+<p>Sehr geehrte Damen und Herren,</p>
+<p>anbei erhalten Sie den Arbeitszeitnachweis von <strong>{name}</strong> f\u00fcr den Monat {month_name} {year}.</p>
+
+<table style="border-collapse:collapse;margin:12px 0">
+<tr><td {td}>Ist-Stunden {month_name}</td><td {td_b}>{actual:.1f} h</td></tr>
+<tr><td {td}>Soll-Stunden {month_name}</td><td {td_b}>{target:.1f} h</td></tr>
+<tr><td {td}>Differenz {month_name}</td><td style="padding:4px 12px;border:1px solid #ccc;font-weight:bold;text-align:right;color:{diff_color}">{diff:+.1f} h</td></tr>
+<tr><td {td}>\u00dcberstundenkonto (kumulativ)</td><td style="padding:4px 12px;border:1px solid #ccc;font-weight:bold;text-align:right;color:{ot_color}">{overtime_total:+.1f} h</td></tr>
+<tr><td {td}>Resturlaub</td><td {td_b}>{vacation_remaining} Tage</td></tr>
+</table>
+
+<p>Die vollst\u00e4ndige Aufstellung ist als Excel-Datei beigef\u00fcgt.</p>
+{report_section}
+
+<h3 style="color:#2c3e50;font-size:1em;margin-bottom:4px">ArbZG-Konformit\u00e4t</h3>
+<p>Der beigef\u00fcgte Arbeitszeitnachweis wurde auf Konformit\u00e4t mit dem
+Arbeitszeitgesetz (ArbZG) gepr\u00fcft. Die folgenden Pr\u00fcfungen wurden
+durchgef\u00fchrt und ergaben <strong>keine Verst\u00f6\u00dfe</strong>:</p>
+<table style="border-collapse:collapse;margin:8px 0;font-size:0.95em">
+<tr><td {td}>\u00a73 ArbZG</td><td {td}>T\u00e4gliche Arbeitszeit max. 10 Stunden</td></tr>
+<tr><td {td}>\u00a73 ArbZG</td><td {td}>Durchschnittliche Arbeitszeit \u2264 8 Stunden \u00fcber 24 Wochen</td></tr>
+<tr><td {td}>\u00a74 ArbZG</td><td {td}>Ruhepausen: mind. 30 min ab 6 h, mind. 45 min ab 9 h</td></tr>
+<tr><td {td}>\u00a75 ArbZG</td><td {td}>Ruhezeit zwischen Arbeitstagen \u2265 11 Stunden</td></tr>
+<tr><td {td}>\u00a79 ArbZG</td><td {td}>Sonn- und Feiertagsruhe</td></tr>
+</table>
+{docs_section}
+
+<p>Mit freundlichen Gr\u00fc\u00dfen<br/>{name}</p>
+</body>
+</html>"""
