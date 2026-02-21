@@ -1,3 +1,4 @@
 title: Overtime Report Generator
-description: ArbZG-konforme Arbeitszeitnachweise
+description: ArbZG-konforme Arbeitszeitnachweise aus Solidtime
 theme: jekyll-theme-minimal
+baseurl: /IceTimereport
