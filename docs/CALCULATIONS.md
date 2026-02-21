@@ -58,10 +58,10 @@ Die zentrale Formel:
 | Tagestyp | Ist-Stunden | Soll-Stunden | Netto-Effekt auf Überstunden |
 |----------|-------------|-------------|------------------------------|
 | **Arbeit** (mit Einträgen) | Tatsächliche Arbeitszeit | hours_per_day | Positiv bei Mehrarbeit, negativ bei Minderarbeit |
-| **Arbeit** (leer, Vergangenheit) | 0 | 0 | Kein Effekt (Brückentag/Gleitzeitabbau) |
+| **Arbeit** (leer, Vergangenheit) | 0 | hours_per_day | **-hours_per_day** (Überstundenabbau) |
 | **Urlaub** | hours_per_day | hours_per_day | Kein Effekt (bezahlte Abwesenheit) |
 | **Krank** | hours_per_day | hours_per_day | Kein Effekt (Entgeltfortzahlung) |
-| **Gleittag** | hours_per_day | hours_per_day | Kein Effekt (kompensierte Abwesenheit) |
+| **Gleittag** | 0 | hours_per_day | **-hours_per_day** (Überstundenabbau) |
 | **Wochenende** | Tatsächliche Arbeitszeit | 0 | Vollständig als Überstunden |
 | **Feiertag** | Tatsächliche Arbeitszeit | 0 | Vollständig als Überstunden |
 
@@ -71,10 +71,13 @@ Die zentrale Formel:
 Einfachster Fall — die Differenz zwischen tatsächlicher Arbeitszeit und Soll bestimmt, ob Überstunden aufgebaut (+) oder abgebaut (-) werden.
 
 **Leere Werktage (keine Solidtime-Einträge):**
-Werden komplett ignoriert (weder Ist noch Soll werden gezählt). Das entspricht einem Tag, an dem Überstunden abgefeiert werden — kein Soll-Abzug, kein Ist-Aufbau. Typische Situationen: Brückentage, kurzfristiger Gleitzeitabbau.
+Ein vergangener Werktag ohne Einträge gilt als Überstundenabbau (Brückentag, Gleitzeitabbau). Das Soll (hours_per_day) wird gezählt, Ist = 0. Dadurch sinkt das Überstundenkonto um hours_per_day pro Tag.
 
-**Urlaub / Krank / Gleittag:**
+**Urlaub / Krank:**
 Bezahlte Abwesenheit — es wird so gerechnet, als hätte man einen normalen Arbeitstag absolviert (Ist = Soll = hours_per_day). Das Überstundenkonto bleibt unverändert.
+
+**Gleittag:**
+Überstundenabbau — der Tag wird explizit in Solidtime als Gleittag gebucht. Ist = 0, Soll = hours_per_day. Das Überstundenkonto sinkt um hours_per_day.
 
 **Wochenende und Feiertage:**
 Hier ist Soll = 0 (man muss nicht arbeiten). Jede gearbeitete Stunde geht daher 1:1 als Überstunde ins Konto.
@@ -287,16 +290,17 @@ Mi:  6h gearbeitet   →  Ist:  6h         Ist:  7h (6h + 1h carry)
 Gesamt:                  Ist: 37h         Ist: 37h  ✓ (gleich)
 ```
 
-### Beispiel 4: Leerer Werktag (Überstundenabbau)
+### Beispiel 4: Leerer Werktag / Gleittag (Überstundenabbau)
 
 ```
 Mo: 9,0h gearbeitet  →  Ist: 9,0h  Soll: 7,8h  Diff: +1,2h
 Di: 8,5h gearbeitet  →  Ist: 8,5h  Soll: 7,8h  Diff: +0,7h
-Mi: (leer, kein Eintrag) → wird ignoriert (Ist: 0, Soll: 0)
+Mi: (leer, kein Eintrag) →  Ist: 0,0h  Soll: 7,8h  Diff: -7,8h
 Do: 8,0h gearbeitet  →  Ist: 8,0h  Soll: 7,8h  Diff: +0,2h
 Fr: 7,5h gearbeitet  →  Ist: 7,5h  Soll: 7,8h  Diff: -0,3h
 ────────────────────────────────────────────────────────────
-Woche:                    Ist: 33,0h Soll: 31,2h Diff: +1,8h
+Woche:                    Ist: 33,0h Soll: 39,0h Diff: -6,0h
 ```
 
-Der leere Mittwoch (z.B. Brückentag) erzeugt keinen Soll-Abzug.
+Der leere Mittwoch (z.B. Brückentag) erzeugt einen Soll-Abzug von 7,8h.
+Das Überstundenkonto sinkt entsprechend. Gleiches gilt für Gleittage.

@@ -112,20 +112,24 @@ def cmd_generate(args):
     print("Applying ArbZG corrections for office version...")
     hours_per_day = config["hours_per_week"] / 5
     corrected = azg.correct_for_office(days, state, hours_per_day=hours_per_day)
-    # Compare only actual working days (exclude Urlaub/Krank/Gleittag which track absence hours)
-    absence_types = {"Urlaub", "Krank", "Gleittag"}
+    # Compare working hours (exclude paid absence and overtime reduction days)
+    paid_absence = {"Urlaub", "Krank"}
+    non_work = {"Urlaub", "Krank", "Gleittag", "Samstag", "Sonntag", "Feiertag"}
     total_work_orig = sum(
         d.actual_hours for d, c in zip(days, corrected)
-        if d.actual_hours > 0 and c.day_type not in absence_types
+        if d.actual_hours > 0 and c.day_type not in non_work
     )
     total_corr_work = sum(
         d.corrected_hours for d in corrected
-        if d.day_type not in absence_types
+        if d.day_type not in non_work
     )
-    absence_days = sum(1 for d in corrected if d.day_type in absence_types)
+    paid_days = sum(1 for d in corrected if d.day_type in paid_absence)
+    gleittage = sum(1 for d in corrected if d.day_type == "Gleittag")
     print(f"  Working hours: {total_work_orig:.1f}h -> Corrected: {total_corr_work:.1f}h (delta: {total_corr_work - total_work_orig:.1f}h)")
-    if absence_days:
-        print(f"  Absence days (Urlaub/Krank/Gleittag): {absence_days} ({absence_days * hours_per_day:.1f}h credited as Ist=Soll)")
+    if paid_days:
+        print(f"  Paid absence (Urlaub/Krank): {paid_days} days ({paid_days * hours_per_day:.1f}h, Ist=Soll)")
+    if gleittage:
+        print(f"  Overtime reduction (Gleittag): {gleittage} days (-{gleittage * hours_per_day:.1f}h)")
 
     # Generate office report
     print("Generating office report...")
@@ -156,8 +160,9 @@ def cmd_send_email(args):
     absence_types = ("Samstag", "Sonntag", "Feiertag")
 
     # Calculate TOTAL overtime since START_DATE across all years
-    # Only count days that have actual time entries (or are Urlaub/Krank/Gleittag).
-    # Empty weekdays (no Solidtime entries) are NOT counted as deficit.
+    # - Urlaub/Krank: Ist = Soll = hours_per_day (paid absence, overtime neutral)
+    # - Gleittag/empty weekday: Ist = 0, Soll = hours_per_day (overtime reduction)
+    # - Weekend/holiday work: all hours count as overtime (Soll = 0)
     total_actual = 0.0
     total_target = 0.0
     total_vacation_used = 0
@@ -180,14 +185,19 @@ def cmd_send_email(args):
                 total_actual += hours_per_day
                 total_target += hours_per_day
                 total_vacation_used += 1
-            elif day_type in ("Krank", "Gleittag"):
+            elif day_type == "Krank":
                 total_actual += hours_per_day
+                total_target += hours_per_day
+            elif day_type == "Gleittag":
+                # Overtime reduction: Soll counts, Ist = 0
                 total_target += hours_per_day
             elif d.actual_hours > 0:
                 # Working day with entries
                 total_actual += d.actual_hours
                 total_target += hours_per_day
-            # else: empty weekday - skip entirely (no target, no actual)
+            else:
+                # Empty weekday (Brückentag / Überstundenabbau): Soll counts, Ist = 0
+                total_target += hours_per_day
 
         current_year += 1
     total_overtime = total_actual - total_target

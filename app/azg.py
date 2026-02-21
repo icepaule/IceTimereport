@@ -124,7 +124,8 @@ def correct_for_office(days: list[DayInfo], state: str = "BY", hours_per_day: fl
         # Determine day type from project names
         day_type = _detect_day_type(day)
 
-        if day_type in ("Urlaub", "Krank", "Gleittag"):
+        if day_type in ("Urlaub", "Krank"):
+            # Paid absence: Ist = Soll (no overtime change)
             start_time, end_time, pause_min = _generate_times(hours_per_day)
             corrected.append(CorrectedDay(
                 date=day.date,
@@ -132,6 +133,19 @@ def correct_for_office(days: list[DayInfo], state: str = "BY", hours_per_day: fl
                 start_time=start_time,
                 end_time=end_time,
                 pause_minutes=pause_min,
+                day_type=day_type,
+                original_hours=day.actual_hours,
+            ))
+            continue
+
+        if day_type == "Gleittag":
+            # Overtime reduction: Ist = 0, Soll remains hours_per_day
+            corrected.append(CorrectedDay(
+                date=day.date,
+                corrected_hours=0,
+                start_time="",
+                end_time="",
+                pause_minutes=0,
                 day_type=day_type,
                 original_hours=day.actual_hours,
             ))
