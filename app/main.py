@@ -338,14 +338,16 @@ def cmd_send_email(args):
         if d.day_type not in non_work_types
     )
 
-    # Vacation: count current year only for remaining days
+    # Vacation: count current year only, subtract carryover from previous year
     yearly_vacation = sum(1 for d in corrected if d.date.month <= month and d.day_type == "Urlaub")
+    vacation_carryover = _calc_vacation_carryover(year, config)
+    effective_vacation = yearly_vacation - vacation_carryover
 
     summary = {
         "actual": month_actual,
         "target": month_target,
         "overtime_total": total_overtime,
-        "vacation_remaining": config["vacation_days"] - yearly_vacation,
+        "vacation_remaining": config["vacation_days"] - effective_vacation,
     }
 
     office_file = os.path.join(
