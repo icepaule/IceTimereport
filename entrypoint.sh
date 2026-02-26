@@ -2,7 +2,8 @@
 set -e
 
 # Export env vars for cron (cron doesn't inherit environment)
-printenv | grep -v "no_proxy" >> /etc/environment
+# Quote values to handle spaces in SMTP_PASS, EMPLOYEE_NAME etc.
+printenv | grep -v "no_proxy" | sed "s/=\(.*\)/='\1'/" >> /etc/environment
 
 # If arguments passed, run as CLI
 if [ "$1" != "" ] && [ "$1" != "cron" ]; then

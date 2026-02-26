@@ -33,9 +33,11 @@ Siehe [Berechnungslogik](docs/CALCULATIONS.md) für eine detaillierte Erklärung
 
 ## Features
 
+- **Multi-Client-Unterstützung:** Alle Solidtime-Einträge zählen standardmäßig, mit konfigurierbaren Ausschlüssen (`EXCLUDE_CLIENTS`, `THW_CLIENT_ID`)
+- **Kumulatives Überstundenkonto:** Jahresübergreifender Übertrag seit `START_DATE`
 - Automatische Feiertagsberechnung für alle 16 Bundesländer
 - Erkennung von Urlaub/Krankheit/Gleittagen aus Projekt-Namen
-- Urlaubs- und Überstundenkonto
+- Urlaubs- und Überstundenkonto mit Vorjahres-Carry-Over
 - Monatliche E-Mail mit Zusammenfassung + Excel-Anhang
 - Google Drive Sync via rclone
 - Täglicher Cron-Job für automatische Generierung
@@ -51,13 +53,13 @@ cd overtime-report
 
 # 2. Konfiguration anpassen
 cp .env.example .env
-nano .env  # Member-ID, Client-ID, E-Mail etc. eintragen
+nano .env  # Member-ID, Ausschlüsse, E-Mail etc. eintragen
 
 # 3. Container bauen und starten
 docker compose up -d
 
-# 4. Manuell generieren (Test)
-docker exec overtime-report python3 /app/main.py generate --year 2025
+# 4. Manuell generieren (alle Jahre seit START_DATE)
+docker exec overtime-report python3 /app/main.py generate
 
 # 5. Ergebnis prüfen
 ls -la output/real/ output/office/

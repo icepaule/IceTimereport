@@ -79,18 +79,41 @@ def build_day_infos(year: int, config: dict) -> list[azg.DayInfo]:
     return days
 
 
-def cmd_generate(args):
-    """Generate both Excel reports."""
-    config = get_config()
-    year = args.year or date.today().year
-    state = config["state"]
+def _calc_year_overtime(days: list[azg.DayInfo], state: str, hours_per_day: float) -> float:
+    """Calculate overtime for a list of DayInfos (single year)."""
+    total_actual = 0.0
+    total_target = 0.0
+    for d in days:
+        if is_weekend(d.date) or is_holiday(d.date, state):
+            total_actual += d.actual_hours
+            continue
+        day_type = _detect_day_type_from_entries(d)
+        if day_type in ("Urlaub", "Krank"):
+            total_actual += hours_per_day
+            total_target += hours_per_day
+        elif day_type == "Gleittag":
+            total_target += hours_per_day
+        elif d.actual_hours > 0:
+            total_actual += d.actual_hours
+            total_target += hours_per_day
+        else:
+            total_target += hours_per_day
+    return total_actual - total_target
 
-    print(f"Generating reports for {year} (State: {state})...")
+
+def _generate_year(year: int, config: dict, prior_overtime: float):
+    """Generate both reports for a single year with carry-over from prior years."""
+    state = config["state"]
+    hours_per_day = config["hours_per_week"] / 5
+
+    print(f"\nGenerating reports for {year} (State: {state})...")
+    if prior_overtime != 0:
+        print(f"  Carry-over from prior years: {prior_overtime:+.2f}h")
 
     days = build_day_infos(year, config)
 
     # Check ArbZG violations
-    print("Checking ArbZG compliance...")
+    print("  Checking ArbZG compliance...")
     azg.check_violations(days, state)
 
     violation_count = sum(1 for d in days if d.violations)
@@ -98,19 +121,19 @@ def cmd_generate(args):
     print(f"  {violation_count} days with violations ({total_violations} total violations)")
 
     # Generate real report
-    print("Generating real report...")
+    print("  Generating real report...")
     real_path = excel_real.generate(
         year, days,
         output_dir=config["output_dir_real"],
         employee_name=config["employee_name"],
         employee_role=config["employee_role"],
         state=state,
+        prior_overtime=prior_overtime,
     )
     print(f"  -> {real_path}")
 
     # Correct for office version
-    print("Applying ArbZG corrections for office version...")
-    hours_per_day = config["hours_per_week"] / 5
+    print("  Applying ArbZG corrections for office version...")
     corrected = azg.correct_for_office(days, state, hours_per_day=hours_per_day)
     # Compare working hours (exclude paid absence and overtime reduction days)
     paid_absence = {"Urlaub", "Krank"}
@@ -132,16 +155,47 @@ def cmd_generate(args):
         print(f"  Overtime reduction (Gleittag): {gleittage} days (-{gleittage * hours_per_day:.1f}h)")
 
     # Generate office report
-    print("Generating office report...")
+    print("  Generating office report...")
     office_path = excel_office.generate(
         year, corrected,
         output_dir=config["output_dir_office"],
         employee_name=config["employee_name"],
         employee_role=config["employee_role"],
         state=state,
+        prior_overtime=prior_overtime,
     )
     print(f"  -> {office_path}")
-    print("Done.")
+
+    # Return this year's overtime for carry-over
+    year_overtime = _calc_year_overtime(days, state, hours_per_day)
+    print(f"  Year overtime: {year_overtime:+.2f}h | Cumulative: {prior_overtime + year_overtime:+.2f}h")
+    return year_overtime
+
+
+def cmd_generate(args):
+    """Generate both Excel reports for all years since START_DATE."""
+    config = get_config()
+    state = config["state"]
+    hours_per_day = config["hours_per_week"] / 5
+    start_date = date.fromisoformat(config["start_date"])
+    current_year = date.today().year
+
+    if args.year:
+        # Single year requested: calculate prior overtime from all years before it
+        prior_overtime = 0.0
+        for yr in range(start_date.year, args.year):
+            yr_days = build_day_infos(yr, config)
+            azg.check_violations(yr_days, state)
+            prior_overtime += _calc_year_overtime(yr_days, state, hours_per_day)
+        _generate_year(args.year, config, prior_overtime)
+    else:
+        # Generate all years from START_DATE with cumulative carry-over
+        prior_overtime = 0.0
+        for yr in range(start_date.year, current_year + 1):
+            year_overtime = _generate_year(yr, config, prior_overtime)
+            prior_overtime += year_overtime
+
+    print("\nDone.")
 
 
 def cmd_send_email(args):

@@ -43,6 +43,7 @@ def generate(
     employee_name: str = "",
     employee_role: str = "",
     state: str = "BY",
+    prior_overtime: float = 0.0,
 ) -> str:
     """Generate office-safe Excel report. Returns output file path."""
     wb = Workbook()
@@ -190,23 +191,35 @@ def generate(
     ws_sum["A6"] = "Gesamt Soll-Stunden:"
     ws_sum["B6"] = round(yearly_target, 2)
     ws_sum["B6"].number_format = "0.00"
-    ws_sum["A7"] = "Überstundenkonto:"
-    ws_sum["B7"] = round(yearly_actual - yearly_target, 2)
+    year_overtime = round(yearly_actual - yearly_target, 2)
+    ws_sum["A7"] = f"Überstunden {year}:"
+    ws_sum["B7"] = year_overtime
     ws_sum["B7"].number_format = "+0.00;-0.00;0.00"
     ws_sum["B7"].font = Font(bold=True, size=12)
 
-    ws_sum["A9"] = "Urlaubskonto:"
-    ws_sum["A9"].font = BOLD
-    ws_sum["A10"] = "Anspruch:"
-    ws_sum["B10"] = VACATION_DAYS
-    ws_sum["A11"] = "Genommen:"
-    ws_sum["B11"] = yearly_vacation_used
-    ws_sum["A12"] = "Resturlaub:"
-    ws_sum["B12"] = VACATION_DAYS - yearly_vacation_used
-    ws_sum["B12"].font = Font(bold=True, size=12)
+    if prior_overtime != 0:
+        ws_sum["A8"] = "Übertrag Vorjahre:"
+        ws_sum["B8"] = round(prior_overtime, 2)
+        ws_sum["B8"].number_format = "+0.00;-0.00;0.00"
 
-    ws_sum["A14"] = "Krankheitstage:"
-    ws_sum["B14"] = yearly_sick_days
+    ws_sum["A9"] = "Überstundenkonto gesamt:"
+    ws_sum["A9"].font = BOLD
+    ws_sum["B9"] = round(prior_overtime + year_overtime, 2)
+    ws_sum["B9"].number_format = "+0.00;-0.00;0.00"
+    ws_sum["B9"].font = Font(bold=True, size=14, color="FF0000" if (prior_overtime + year_overtime) < 0 else "008000")
+
+    ws_sum["A11"] = "Urlaubskonto:"
+    ws_sum["A11"].font = BOLD
+    ws_sum["A12"] = "Anspruch:"
+    ws_sum["B12"] = VACATION_DAYS
+    ws_sum["A13"] = "Genommen:"
+    ws_sum["B13"] = yearly_vacation_used
+    ws_sum["A14"] = "Resturlaub:"
+    ws_sum["B14"] = VACATION_DAYS - yearly_vacation_used
+    ws_sum["B14"].font = Font(bold=True, size=12)
+
+    ws_sum["A16"] = "Krankheitstage:"
+    ws_sum["B16"] = yearly_sick_days
 
     ws_sum.column_dimensions["A"].width = 25
     ws_sum.column_dimensions["B"].width = 15

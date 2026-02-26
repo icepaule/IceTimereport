@@ -30,9 +30,15 @@ def get_connection():
 
 
 def fetch_entries(start_date: date, end_date: date) -> list[TimeEntry]:
-    """Fetch all time entries for the configured member/client in date range."""
+    """Fetch all work-relevant time entries in date range.
+
+    Includes: all member entries by default (all clients, entries without client, THW on weekdays).
+    Excludes: 'Personal' client entirely, THW on weekends (personal volunteer work).
+    Configurable via EXCLUDE_CLIENTS env var (comma-separated client IDs).
+    """
     member_id = os.environ["MEMBER_ID"]
-    client_id = os.environ.get("MHB_CLIENT_ID")
+    exclude_clients = os.environ.get("EXCLUDE_CLIENTS", "").strip()
+    thw_client_id = os.environ.get("THW_CLIENT_ID", "")
 
     query = """
         SELECT
@@ -49,11 +55,20 @@ def fetch_entries(start_date: date, end_date: date) -> list[TimeEntry]:
           AND te.start >= %s
           AND te.start < %s
     """
-    params = [member_id, start_date, end_date + __import__("datetime").timedelta(days=1)]
+    params: list = [member_id, start_date, end_date + __import__("datetime").timedelta(days=1)]
 
-    if client_id:
-        query += " AND te.client_id = %s"
-        params.append(client_id)
+    # Exclude personal clients
+    if exclude_clients:
+        client_ids = [c.strip() for c in exclude_clients.split(",") if c.strip()]
+        if client_ids:
+            placeholders = ",".join(["%s"] * len(client_ids))
+            query += " AND (te.client_id IS NULL OR te.client_id NOT IN ({}))".format(placeholders)
+            params.extend(client_ids)
+
+    # Exclude THW on weekends (Sat=6, Sun=0 in PostgreSQL EXTRACT DOW)
+    if thw_client_id:
+        query += " AND NOT (te.client_id = %s AND EXTRACT(DOW FROM te.start) IN (0, 6))"
+        params.append(thw_client_id)
 
     query += " ORDER BY te.start"
 

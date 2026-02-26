@@ -64,25 +64,26 @@ docker exec solidtime-database-1 psql -U solidtime -d solidtime \
   -c "SELECT m.id, u.name, u.email FROM members m JOIN users u ON m.user_id = u.id"
 ```
 
-### Client-ID herausfinden (optional)
+### Client-IDs herausfinden (optional)
 
-Wenn du nur Einträge eines bestimmten Kunden/Arbeitgebers auswerten willst:
+Standardmäßig werden **alle Zeiteinträge** des Members ausgewertet (Multi-Client). Über Umgebungsvariablen können bestimmte Clients ausgeschlossen werden:
 
 ```bash
 docker exec solidtime-database-1 psql -U solidtime -d solidtime \
   -c "SELECT id, name FROM clients"
 ```
 
-Trage die gewünschte Client-ID als `MHB_CLIENT_ID` ein. Leer lassen = alle Kunden.
+Siehe [Administratorhandbuch](ADMIN.md#client-ids-finden-optional) für Details zu den Ausschlussregeln.
 
 ### Optionale Felder
 
 | Variable | Beschreibung | Standard |
 |----------|-------------|---------|
-| `MHB_CLIENT_ID` | Filter nach Client | (leer = alle) |
+| `EXCLUDE_CLIENTS` | Client-IDs ausschließen (komma-getrennt) | (leer = keine Ausschlüsse) |
+| `THW_CLIENT_ID` | Ehrenamt-Client: Wochenend-Einträge ausschließen | (leer) |
 | `EMPLOYEE_ROLE` | Funktion/Rolle | (leer) |
 | `VACATION_DAYS` | Urlaubstage pro Jahr | `30` |
-| `START_DATE` | Beginn der Erfassung | `2024-01-01` |
+| `START_DATE` | Beginn der Erfassung (Vertragsstart) | `2024-01-01` |
 | `SMTP_*` | E-Mail-Konfiguration | (siehe ADMIN.md) |
 | `RCLONE_*` | Google Drive Sync | (siehe ADMIN.md) |
 
@@ -111,27 +112,35 @@ docker exec overtime-report python3 /app/main.py <befehl> [optionen]
 
 ### `generate` - Berichte erstellen
 
-Erzeugt beide Excel-Dateien (real + office) für ein ganzes Jahr:
+Erzeugt beide Excel-Dateien (real + office). Ohne `--year` werden **alle Jahre seit `START_DATE`** generiert, mit kumulativem Überstundenübertrag:
 
 ```bash
-# Aktuelles Jahr
+# Alle Jahre seit START_DATE (empfohlen)
 docker exec overtime-report python3 /app/main.py generate
 
-# Bestimmtes Jahr
-docker exec overtime-report python3 /app/main.py generate --year 2024
+# Bestimmtes Jahr (Vorjahre werden für Übertrag berechnet)
+docker exec overtime-report python3 /app/main.py generate --year 2025
 ```
 
 Ausgabe:
 ```
+Generating reports for 2024 (State: BY)...
+  Checking ArbZG compliance...
+  5 days with violations (7 total violations)
+  Generating real report...
+  -> /output/real/Arbeitszeitnachweis_2024_real.xlsx
+  ...
+  Year overtime: +42.50h | Cumulative: +42.50h
+
 Generating reports for 2025 (State: BY)...
-Checking ArbZG compliance...
+  Carry-over from prior years: +42.50h
+  Checking ArbZG compliance...
   12 days with violations (15 total violations)
-Generating real report...
+  Generating real report...
   -> /output/real/Arbeitszeitnachweis_2025_real.xlsx
-Applying ArbZG corrections for office version...
-  Original: 2048.5h -> Corrected: 2048.5h (delta: 0.0h)
-Generating office report...
-  -> /output/office/Arbeitszeitnachweis_2025.xlsx
+  ...
+  Year overtime: -12.30h | Cumulative: +30.20h
+
 Done.
 ```
 
@@ -226,7 +235,9 @@ Ein Sheet pro Monat + Zusammenfassungs-Sheet mit Urlaubskonto.
 
 Beide Versionen enthalten ein Zusammenfassungs-Sheet mit:
 - Jahres-Ist- und Soll-Stunden
-- Überstundenkonto
+- **Überstunden des Jahres** (Ist − Soll)
+- **Übertrag Vorjahre** (kumulativ seit `START_DATE`, nur wenn ungleich 0)
+- **Überstundenkonto gesamt** (fett, farbig: grün bei Plus, rot bei Minus)
 - Urlaubskonto (genommen / Restanspruch)
 - Krankheitstage
 - (Nur real) ArbZG-Verstoß-Statistik
@@ -276,12 +287,25 @@ Siehe [Berechnungslogik](CALCULATIONS.md) für Details und Beispielrechnungen.
 
 ### Kann ich mehrere Jahre generieren?
 
-Ja, führe den Befehl für jedes Jahr einzeln aus:
+Ja. Ohne `--year` generiert das Tool automatisch **alle Jahre seit `START_DATE`** mit kumulativem Überstundenübertrag:
 
 ```bash
-docker exec overtime-report python3 /app/main.py generate --year 2024
-docker exec overtime-report python3 /app/main.py generate --year 2025
+docker exec overtime-report python3 /app/main.py generate
 ```
+
+Jedes Jahr erhält den korrekten Übertrag aus den Vorjahren. Die Berichte werden in der Reihenfolge `START_DATE.year` bis zum aktuellen Jahr erstellt.
+
+### Ich arbeite für mehrere Kunden/Arbeitgeber — wie werden die Stunden gezählt?
+
+Standardmäßig werden **alle Zeiteinträge** über alle Solidtime-Clients hinweg gezählt. Das bedeutet: Arbeit für den Hauptarbeitgeber, Nebentätigkeiten bei anderen Kunden (z.B. HDBW) und Freistellungen (z.B. THW an Werktagen) fließen alle in das Überstundenkonto ein.
+
+Mit `EXCLUDE_CLIENTS` kannst du bestimmte Clients komplett ausschließen (z.B. private Projekte). Mit `THW_CLIENT_ID` kannst du ehrenamtliche Wochenendarbeit ausschließen, während Werktags-Einträge als Freistellung zählen.
+
+Siehe [Berechnungslogik](CALCULATIONS.md#datenquelle-multi-client-filterung) für Details.
+
+### Was bedeutet "Übertrag Vorjahre" im Zusammenfassungs-Sheet?
+
+Das ist die Summe aller Überstunden aus den Jahren vor dem aktuellen Berichtsjahr (seit `START_DATE`). Zusammen mit den Überstunden des aktuellen Jahres ergibt sich das Gesamtkonto. So geht nichts verloren, wenn ein neues Jahr beginnt.
 
 ### Der Container findet die Solidtime-Datenbank nicht?
 

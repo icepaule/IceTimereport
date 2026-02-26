@@ -42,6 +42,7 @@ def generate(
     employee_name: str = "",
     employee_role: str = "",
     state: str = "BY",
+    prior_overtime: float = 0.0,
 ) -> str:
     """Generate real Excel report. Returns output file path."""
     wb = Workbook()
@@ -197,15 +198,27 @@ def generate(
     ws_sum["A6"] = "Gesamt Soll-Stunden:"
     ws_sum["B6"] = round(yearly_target, 2)
     ws_sum["B6"].number_format = "0.00"
-    ws_sum["A7"] = "Überstunden:"
-    ws_sum["B7"] = round(yearly_actual - yearly_target, 2)
+    year_overtime = round(yearly_actual - yearly_target, 2)
+    ws_sum["A7"] = f"Überstunden {year}:"
+    ws_sum["B7"] = year_overtime
     ws_sum["B7"].number_format = "+0.00;-0.00;0.00"
     ws_sum["B7"].font = Font(bold=True, size=12)
 
+    if prior_overtime != 0:
+        ws_sum["A8"] = "Übertrag Vorjahre:"
+        ws_sum["B8"] = round(prior_overtime, 2)
+        ws_sum["B8"].number_format = "+0.00;-0.00;0.00"
+
+    ws_sum["A9"] = "Überstundenkonto gesamt:"
+    ws_sum["A9"].font = BOLD
+    ws_sum["B9"] = round(prior_overtime + year_overtime, 2)
+    ws_sum["B9"].number_format = "+0.00;-0.00;0.00"
+    ws_sum["B9"].font = Font(bold=True, size=14, color="FF0000" if (prior_overtime + year_overtime) < 0 else "008000")
+
     if yearly_violations:
-        ws_sum["A9"] = "ArbZG-Verstöße:"
-        ws_sum["A9"].font = BOLD
-        r = 10
+        ws_sum["A11"] = "ArbZG-Verstöße:"
+        ws_sum["A11"].font = BOLD
+        r = 12
         for violation_type, count in sorted(yearly_violations.items()):
             ws_sum[f"A{r}"] = violation_type
             ws_sum[f"B{r}"] = count

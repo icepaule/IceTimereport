@@ -1,11 +1,15 @@
 # Overtime Report Cron Jobs
+# Source environment variables (exported by entrypoint.sh)
+SHELL=/bin/sh
+BASH_ENV=/etc/environment
+
 # Generate reports daily at 06:00
-0 6 * * * cd /app && python3 main.py generate >> /var/log/overtime-report.log 2>&1
+0 6 * * * . /etc/environment; cd /app && /usr/local/bin/python3 main.py generate >> /var/log/overtime-report.log 2>&1
 
 # Sync office version to Google Drive after generation
-5 6 * * * rclone copy /output/office ${RCLONE_REMOTE}:${RCLONE_PATH} >> /var/log/overtime-report.log 2>&1
+5 6 * * * . /etc/environment; rclone copy /output/office ${RCLONE_REMOTE}:${RCLONE_PATH} >> /var/log/overtime-report.log 2>&1
 
 # Send monthly email on the 1st at 07:00
-0 7 1 * * cd /app && python3 main.py send-email >> /var/log/overtime-report.log 2>&1
+0 7 1 * * . /etc/environment; cd /app && /usr/local/bin/python3 main.py send-email >> /var/log/overtime-report.log 2>&1
 
 # Empty line required by cron

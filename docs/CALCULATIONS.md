@@ -5,12 +5,15 @@ Dieses Dokument erklärt im Detail, wie die Überstunden, Abwesenheiten und ArbZ
 ## Inhaltsverzeichnis
 
 1. [Grundbegriffe](#grundbegriffe)
-2. [Tagestyp-Erkennung](#tagestyp-erkennung)
-3. [Überstundenberechnung](#überstundenberechnung)
-4. [ArbZG-Verstöße](#arbzg-verstöße)
-5. [Korrektur-Algorithmus (Büro-Version)](#korrektur-algorithmus-büro-version)
-6. [Monats-E-Mail und kumulative Überstunden](#monats-e-mail-und-kumulative-überstunden)
-7. [Beispielrechnungen](#beispielrechnungen)
+2. [Datenquelle: Multi-Client-Filterung](#datenquelle-multi-client-filterung)
+3. [Tagestyp-Erkennung](#tagestyp-erkennung)
+4. [Überstundenberechnung](#überstundenberechnung)
+5. [Jahresübergreifendes Überstundenkonto (Carry-Over)](#jahresübergreifendes-überstundenkonto-carry-over)
+6. [ArbZG-Verstöße](#arbzg-verstöße)
+7. [Korrektur-Algorithmus (Büro-Version)](#korrektur-algorithmus-büro-version)
+8. [Zusammenfassungs-Sheet](#zusammenfassungs-sheet)
+9. [Monats-E-Mail und kumulative Überstunden](#monats-e-mail-und-kumulative-überstunden)
+10. [Beispielrechnungen](#beispielrechnungen)
 
 ---
 
@@ -23,6 +26,52 @@ Dieses Dokument erklärt im Detail, wie die Überstunden, Abwesenheiten und ArbZ
 | **hours_per_day** | `HOURS_PER_WEEK / 5` (z.B. 39 / 5 = 7,8h) |
 | **Carry-Over** | Stundenübertrag von einem Tag auf den nächsten Werktag |
 | **Abwesenheitstypen** | Urlaub, Krank, Gleittag |
+
+---
+
+## Datenquelle: Multi-Client-Filterung
+
+Das Tool wertet standardmäßig **alle Zeiteinträge** des konfigurierten Members aus — unabhängig vom zugeordneten Client/Kunden in Solidtime. Es werden also Einträge über alle Arbeitgeber, Projekte und Kunden hinweg berücksichtigt.
+
+### Ausschlüsse konfigurieren
+
+Über Umgebungsvariablen können bestimmte Einträge gezielt ausgeschlossen werden:
+
+| Variable | Wirkung |
+|----------|---------|
+| `EXCLUDE_CLIENTS` | Komma-getrennte Client-IDs, die **komplett** aus der Berechnung ausgeschlossen werden (z.B. private Nebenprojekte) |
+| `THW_CLIENT_ID` | Client-ID für ehrenamtliche Arbeit (z.B. THW). **Wochenend-Einträge** dieses Clients werden ausgeschlossen (private Freiwilligenarbeit), **Werktags-Einträge** zählen normal (Freistellung durch den Arbeitgeber) |
+
+### Beispiel
+
+```
+Solidtime-Clients:         Arbeitgeber, HDBW, THW, Privat
+EXCLUDE_CLIENTS=<Privat-ID>
+THW_CLIENT_ID=<THW-ID>
+
+Ergebnis:
+  Arbeitgeber-Einträge  → zählen immer
+  HDBW-Einträge         → zählen immer
+  THW Mo-Fr             → zählen (Freistellung)
+  THW Sa/So             → ausgeschlossen (Ehrenamt)
+  Privat                → ausgeschlossen (komplett)
+  Einträge ohne Client  → zählen immer
+```
+
+### SQL-Filterung
+
+Die Filterung erfolgt direkt in der Datenbankabfrage:
+
+```sql
+-- Basis: alle Einträge des Members
+WHERE te.member_id = :member_id AND te.end IS NOT NULL
+
+-- EXCLUDE_CLIENTS: vollständig ausschließen
+AND (te.client_id IS NULL OR te.client_id NOT IN (:excluded_ids))
+
+-- THW_CLIENT_ID: nur Wochenend-Einträge ausschließen
+AND NOT (te.client_id = :thw_id AND EXTRACT(DOW FROM te.start) IN (0, 6))
+```
 
 ---
 
@@ -81,6 +130,42 @@ Bezahlte Abwesenheit — es wird so gerechnet, als hätte man einen normalen Arb
 
 **Wochenende und Feiertage:**
 Hier ist Soll = 0 (man muss nicht arbeiten). Jede gearbeitete Stunde geht daher 1:1 als Überstunde ins Konto.
+
+---
+
+## Jahresübergreifendes Überstundenkonto (Carry-Over)
+
+Das Überstundenkonto wird **kumulativ über alle Jahre** seit `START_DATE` geführt. Beim Generieren der Berichte werden alle Jahre seit dem Vertragsstart berücksichtigt:
+
+### Berechnung
+
+```
+prior_overtime = 0
+
+Für jedes Jahr von START_DATE.year bis aktuelles Jahr:
+  year_overtime = Σ Ist − Σ Soll  (für dieses Jahr)
+  → Bericht generieren mit prior_overtime als Übertrag
+  prior_overtime += year_overtime
+```
+
+### Beispiel
+
+```
+START_DATE = 2024-01-01
+
+2024: Überstunden = +42,5h
+  → Bericht 2024: Übertrag Vorjahre: 0h, Jahr: +42,5h, Gesamt: +42,5h
+
+2025: Überstunden = -12,3h
+  → Bericht 2025: Übertrag Vorjahre: +42,5h, Jahr: -12,3h, Gesamt: +30,2h
+
+2026: Überstunden = +8,0h (laufend)
+  → Bericht 2026: Übertrag Vorjahre: +30,2h, Jahr: +8,0h, Gesamt: +38,2h
+```
+
+### Verhalten bei Einzel-Jahr-Generierung
+
+Wenn ein einzelnes Jahr mit `--year YYYY` generiert wird, berechnet das Tool automatisch die Überstunden aller Vorjahre seit `START_DATE`, um den korrekten Übertrag zu ermitteln.
 
 ---
 
@@ -215,20 +300,52 @@ Das führt dazu, dass die **Monatssummen** in der Büro-Version von den echten M
 
 ---
 
+## Zusammenfassungs-Sheet
+
+Beide Excel-Versionen (real und Büro) enthalten ein Zusammenfassungs-Sheet mit dem Überstundenkonto:
+
+### Anzeige im Zusammenfassungs-Sheet
+
+```
+Gesamt Ist-Stunden:        1.842,50
+Gesamt Soll-Stunden:       1.800,00
+Überstunden 2025:              +42,50
+Übertrag Vorjahre:             +30,20    (nur wenn ≠ 0)
+Überstundenkonto gesamt:       +72,70    (fett, farbig)
+```
+
+| Zeile | Berechnung |
+|-------|-----------|
+| Überstunden YYYY | Ist − Soll des aktuellen Jahres |
+| Übertrag Vorjahre | Kumulative Überstunden aller Jahre vor YYYY |
+| **Überstundenkonto gesamt** | Überstunden YYYY + Übertrag Vorjahre |
+
+Die Zeile "Überstundenkonto gesamt" ist **fett und farbig** hervorgehoben:
+- **Grün** bei positivem Saldo (Überstunden vorhanden)
+- **Rot** bei negativem Saldo (Minusstunden)
+
+Die Zeile "Übertrag Vorjahre" wird nur angezeigt, wenn der Übertrag ungleich 0 ist (also ab dem zweiten Jahr der Erfassung).
+
+---
+
 ## Monats-E-Mail und kumulative Überstunden
 
 Die monatliche E-Mail enthält eine kumulative Überstundenberechnung seit `START_DATE` (Vertragsstart).
 
 ### Berechnung
 
+Die E-Mail berechnet die kumulativen Überstunden über alle Jahre seit `START_DATE` bis einschließlich des Zielmonats:
+
 ```
-Für jedes Jahr von START_DATE.year bis aktuelles Jahr:
-  Für jeden Tag bis einschließlich Zielmonat:
+Für jedes Jahr von START_DATE.year bis Ziel-Jahr:
+  Für jeden Tag (bis einschließlich Zielmonat im Ziel-Jahr):
     → Tagestyp bestimmen (siehe oben)
     → Ist und Soll addieren (Regeln wie in der Tabelle oben)
 
-Gesamtüberstunden = Σ Ist − Σ Soll
+Gesamtüberstunden = Σ Ist − Σ Soll (über alle Jahre)
 ```
+
+Dabei werden alle Zeiteinträge gemäß der Multi-Client-Filterung (siehe oben) berücksichtigt.
 
 ### Monatliche Statistiken
 

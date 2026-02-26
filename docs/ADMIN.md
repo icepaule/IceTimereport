@@ -253,16 +253,16 @@ docker exec solidtime-database-1 psql -U solidtime -d solidtime \
 
 Ausgabe:
 ```
-              member_id               | name   | email
---------------------------------------+--------+------------------
- 820cff5d-5819-4536-bbdf-378d4e11d6da | mpauli | info@mpauli.de
+              member_id               |    name     |      email
+--------------------------------------+-------------+------------------
+ xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx | Max Muster  | max@example.com
 ```
 
 Trage deine `member_id` als `MEMBER_ID` in die `.env` ein.
 
-### Client-ID finden (optional)
+### Client-IDs finden (optional)
 
-Wenn du nur Einträge eines bestimmten Kunden auswerten willst:
+Das Tool wertet standardmäßig alle Zeiteinträge des Members aus. Über Client-IDs können bestimmte Kunden ausgeschlossen werden:
 
 ```bash
 docker exec solidtime-database-1 psql -U solidtime -d solidtime \
@@ -273,11 +273,41 @@ Ausgabe:
 ```
                   id                  |    name
 --------------------------------------+----------
- f0b38ad4-0de8-4976-94a1-d5514913cfa2 | MHB
- c854e48e-7c0b-44d8-b25e-4db61175d4dc | THW
+ f0b38ad4-0de8-... | Arbeitgeber
+ c854e48e-7c0b-... | THW
+ a1b2c3d4-5e6f-... | Privat
 ```
 
-Trage die gewünschte ID als `MHB_CLIENT_ID` in die `.env` ein. Leer lassen = alle Clients.
+#### EXCLUDE_CLIENTS
+
+Komma-getrennte Client-IDs, die komplett aus der Berechnung ausgeschlossen werden (z.B. private Nebenprojekte):
+
+```env
+EXCLUDE_CLIENTS=a1b2c3d4-5e6f-...
+```
+
+Mehrere IDs mit Komma trennen:
+
+```env
+EXCLUDE_CLIENTS=uuid-1,uuid-2,uuid-3
+```
+
+#### THW_CLIENT_ID
+
+Client-ID für ehrenamtliche/freiwillige Arbeit (z.B. THW). **Wochenend-Einträge** dieses Clients werden ausgeschlossen (private Freiwilligenarbeit), **Werktags-Einträge** zählen normal (Freistellung durch den Arbeitgeber):
+
+```env
+THW_CLIENT_ID=c854e48e-7c0b-...
+```
+
+#### Zusammenfassung Filterverhalten
+
+| Szenario | Ergebnis |
+|----------|----------|
+| Kein `EXCLUDE_CLIENTS`, kein `THW_CLIENT_ID` | Alle Einträge zählen |
+| `EXCLUDE_CLIENTS` gesetzt | Diese Clients komplett ausgeschlossen |
+| `THW_CLIENT_ID` gesetzt | Nur Wochenend-Einträge dieses Clients ausgeschlossen |
+| Einträge ohne Client | Zählen immer |
 
 ### Projekte anzeigen
 
@@ -415,7 +445,11 @@ print(f'{len(entries)} Einträge im Januar 2024')
 ### 3. Reports generieren
 
 ```bash
-docker exec overtime-report python3 /app/main.py generate --year 2024
+# Alle Jahre seit START_DATE generieren (mit kumulativem Übertrag)
+docker exec overtime-report python3 /app/main.py generate
+
+# Oder ein bestimmtes Jahr (Vorjahre werden für den Übertrag berechnet)
+docker exec overtime-report python3 /app/main.py generate --year 2025
 ```
 
 ### 4. Ergebnis prüfen
@@ -515,7 +549,7 @@ docker exec solidtime-database-1 psql -U solidtime -d solidtime \
   -c "SELECT count(*) FROM time_entries WHERE member_id = 'DEINE-ID'"
 ```
 
-**Lösung:** Prüfe ob `MEMBER_ID` und ggf. `MHB_CLIENT_ID` korrekt sind.
+**Lösung:** Prüfe ob `MEMBER_ID` korrekt ist. Prüfe auch `EXCLUDE_CLIENTS` und `THW_CLIENT_ID` — falsche IDs könnten relevante Einträge versehentlich ausschließen.
 
 ### Excel-Dateien leer
 
