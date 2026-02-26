@@ -134,10 +134,9 @@ Generating reports for 2024 (State: BY)...
 
 Generating reports for 2025 (State: BY)...
   Carry-over from prior years: +42.50h
+  Vacation carryover from previous year: 3 days
   Checking ArbZG compliance...
   12 days with violations (15 total violations)
-  Generating real report...
-  -> /output/real/Arbeitszeitnachweis_2025_real.xlsx
   ...
   Year overtime: -12.30h | Cumulative: +30.20h
 
@@ -194,7 +193,9 @@ docker exec overtime-report python3 /app/main.py send-email --test
 
 Ein Sheet pro Monat + Zusammenfassungs-Sheet.
 
-**Spalten:**
+**Monats-Sheet:**
+
+![Reale Version — Monatsansicht mit Projekten und ArbZG-Spalte](images/month_real_feb2026.png)
 
 | Spalte | Inhalt |
 |--------|--------|
@@ -204,7 +205,7 @@ Ein Sheet pro Monat + Zusammenfassungs-Sheet.
 | Projekt | Solidtime-Projektname(n) |
 | Beschreibung | Solidtime-Beschreibung(en) |
 | Ist (h) | Tatsächliche Stunden |
-| Soll (h) | Vertragliche Stunden |
+| Soll (h) | Vertragliche Stunden (nur bis Stichtag) |
 | ArbZG | OK / §3 >10h / §4 Pause / §5 Ruhezeit / §9 Sonntag |
 
 **Farbcodierung:**
@@ -212,11 +213,17 @@ Ein Sheet pro Monat + Zusammenfassungs-Sheet.
 - Grau: Wochenende/Feiertag
 - Gelb: Urlaub/Krank/Gleittag
 
+**Zusammenfassung mit ArbZG-Verstößen:**
+
+![Reale Version — Zusammenfassung](images/summary_real_2026.png)
+
 ### Büro-Version (Arbeitszeitnachweis_YYYY.xlsx)
 
 Ein Sheet pro Monat + Zusammenfassungs-Sheet mit Urlaubskonto.
 
-**Spalten:**
+**Monats-Sheet:**
+
+![Büro-Version — Monatsansicht mit fiktiven Zeiten](images/month_office_feb2026.png)
 
 | Spalte | Inhalt |
 |--------|--------|
@@ -227,19 +234,24 @@ Ein Sheet pro Monat + Zusammenfassungs-Sheet mit Urlaubskonto.
 | Ende | Berechnete Endzeit |
 | Pause (min) | 0/30/45 je nach Stunden |
 | Ist (h) | Korrigierte Stunden (max 10h) |
-| Soll (h) | Vertragliche Stunden |
+| Soll (h) | Vertragliche Stunden (nur bis Stichtag) |
 
 **Keine** Projektnamen oder Beschreibungen in dieser Version.
 
 ### Zusammenfassungs-Sheet
 
-Beide Versionen enthalten ein Zusammenfassungs-Sheet mit:
-- Jahres-Ist- und Soll-Stunden
+Beide Versionen enthalten ein Zusammenfassungs-Sheet:
+
+![Büro-Version — Zusammenfassung mit Überstundenkonto und Urlaubsübertrag](images/summary_office_2025.png)
+
+Inhalte:
+- **Stand**: Stichtag der Berechnung (heute für laufendes Jahr, 31.12. für abgeschlossene Jahre)
+- **Gesamt Ist-/Soll-Stunden**: Nur bis zum Stichtag berechnet
 - **Überstunden des Jahres** (Ist − Soll)
 - **Übertrag Vorjahre** (kumulativ seit `START_DATE`, nur wenn ungleich 0)
 - **Überstundenkonto gesamt** (fett, farbig: grün bei Plus, rot bei Minus)
-- Urlaubskonto (genommen / Restanspruch)
-- Krankheitstage
+- **Urlaubskonto**: Anspruch, genommene Tage (abzgl. Vorjahresübertrag), Resturlaub
+- **Krankheitstage**
 - (Nur real) ArbZG-Verstoß-Statistik
 
 ---
@@ -306,6 +318,16 @@ Siehe [Berechnungslogik](CALCULATIONS.md#datenquelle-multi-client-filterung) fü
 ### Was bedeutet "Übertrag Vorjahre" im Zusammenfassungs-Sheet?
 
 Das ist die Summe aller Überstunden aus den Jahren vor dem aktuellen Berichtsjahr (seit `START_DATE`). Zusammen mit den Überstunden des aktuellen Jahres ergibt sich das Gesamtkonto. So geht nichts verloren, wenn ein neues Jahr beginnt.
+
+### Warum zeigt das aktuelle Jahr weniger Soll-Stunden als erwartet?
+
+Das aktuelle Jahr wird nur **bis zum heutigen Tag** berechnet (Stichtag). Zukünftige Tage haben Soll = 0, damit keine falschen Minusstunden entstehen. Das Stichtag-Datum steht als "Stand: TT.MM.JJJJ" im Zusammenfassungs-Sheet.
+
+### Was bedeutet "X Tage aus Vorjahr" beim Urlaubskonto?
+
+Wenn eine Urlaubsperiode im Dezember beginnt und im Januar fortgesetzt wird, zählen die Januar-Tage gegen den Urlaubsanspruch des Vorjahres — nicht des neuen Jahres. So wird der Resturlaub korrekt berechnet.
+
+Beispiel: Urlaub vom 31.12.2025 bis 05.01.2026 → Die 2 Werktage im Januar 2026 (2. und 5. Jan) zählen als Urlaub 2025. Das 2026er Urlaubskonto bleibt bei 30 Tagen.
 
 ### Der Container findet die Solidtime-Datenbank nicht?
 

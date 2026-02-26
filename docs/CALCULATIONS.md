@@ -11,9 +11,11 @@ Dieses Dokument erklärt im Detail, wie die Überstunden, Abwesenheiten und ArbZ
 5. [Jahresübergreifendes Überstundenkonto (Carry-Over)](#jahresübergreifendes-überstundenkonto-carry-over)
 6. [ArbZG-Verstöße](#arbzg-verstöße)
 7. [Korrektur-Algorithmus (Büro-Version)](#korrektur-algorithmus-büro-version)
-8. [Zusammenfassungs-Sheet](#zusammenfassungs-sheet)
-9. [Monats-E-Mail und kumulative Überstunden](#monats-e-mail-und-kumulative-überstunden)
-10. [Beispielrechnungen](#beispielrechnungen)
+8. [Stichtag-Berechnung (aktuelles Jahr)](#stichtag-berechnung-aktuelles-jahr)
+9. [Urlaubsübertrag (Vacation Carryover)](#urlaubsübertrag-vacation-carryover)
+10. [Zusammenfassungs-Sheet](#zusammenfassungs-sheet)
+11. [Monats-E-Mail und kumulative Überstunden](#monats-e-mail-und-kumulative-überstunden)
+12. [Beispielrechnungen](#beispielrechnungen)
 
 ---
 
@@ -300,31 +302,86 @@ Das führt dazu, dass die **Monatssummen** in der Büro-Version von den echten M
 
 ---
 
+## Stichtag-Berechnung (aktuelles Jahr)
+
+Für das **aktuelle Jahr** werden Soll-Stunden und Überstunden nur bis zum heutigen Tag berechnet — nicht für das gesamte Jahr. Zukünftige Tage erhalten `Soll = 0` und werden weder als Überstunden noch als Minusstunden gezählt.
+
+Für **abgeschlossene Jahre** werden alle Tage des Jahres berücksichtigt (Stand: 31.12.).
+
+Das Stichtag-Datum wird im Zusammenfassungs-Sheet als "Stand: TT.MM.JJJJ" angezeigt.
+
+**Beispiel aktuelles Jahr (Stand: 26.02.2026):**
+
+![Zusammenfassung 2026 — nur bis Stichtag berechnet](images/summary_office_2026.png)
+
+**Beispiel abgeschlossenes Jahr:**
+
+![Zusammenfassung 2024 — volles Jahr](images/summary_office_2024.png)
+
+---
+
+## Urlaubsübertrag (Vacation Carryover)
+
+Urlaubsperioden, die im Vorjahr beginnen und im neuen Jahr fortgesetzt werden, zählen gegen den **Urlaubsanspruch des Vorjahres**.
+
+### Erkennung
+
+1. Prüfe, ob der letzte Werktag im Dezember des Vorjahres ein Urlaubstag ist
+2. Falls ja: Zähle zusammenhängende Urlaubstage ab dem 1. Januar (Wochenenden/Feiertage überspringen)
+3. Diese Tage werden als "Übertrag aus Vorjahr" vom aktuellen Urlaubskonto abgezogen
+
+### Beispiel
+
+```
+Urlaub vom 31.12.2025 bis 14.01.2026:
+
+Dezember 2025:  31.12. = Urlaub ✓
+
+Januar 2026:    01.01. = Neujahr (übersprungen)
+                02.01. = Urlaub  → Carryover +1
+                03.01. = Sa (übersprungen)
+                04.01. = So (übersprungen)
+                05.01. = Urlaub  → Carryover +1
+                06.01. = Hl. Drei Könige (übersprungen)
+                07.01. = Krank   → STOP (kein Urlaub mehr)
+
+Ergebnis: 2 Tage Urlaubsübertrag aus 2025
+→ 2026 Urlaubskonto: Genommen = 0, Resturlaub = 30
+```
+
+Im Zusammenfassungs-Sheet wird der Übertrag als Hinweis angezeigt:
+
+![Zusammenfassung 2025 mit Urlaubsübertrag](images/summary_office_2025.png)
+
+---
+
 ## Zusammenfassungs-Sheet
 
-Beide Excel-Versionen (real und Büro) enthalten ein Zusammenfassungs-Sheet mit dem Überstundenkonto:
+Beide Excel-Versionen (real und Büro) enthalten ein Zusammenfassungs-Sheet mit dem Überstundenkonto, Urlaubskonto und Krankheitstagen.
 
-### Anzeige im Zusammenfassungs-Sheet
-
-```
-Gesamt Ist-Stunden:        1.842,50
-Gesamt Soll-Stunden:       1.800,00
-Überstunden 2025:              +42,50
-Übertrag Vorjahre:             +30,20    (nur wenn ≠ 0)
-Überstundenkonto gesamt:       +72,70    (fett, farbig)
-```
+### Inhalt
 
 | Zeile | Berechnung |
 |-------|-----------|
+| Stand | Stichtag der Berechnung (heute oder 31.12. bei abgeschlossenen Jahren) |
+| Gesamt Ist-Stunden | Summe aller Ist-Stunden bis Stichtag |
+| Gesamt Soll-Stunden | Summe aller Soll-Stunden bis Stichtag |
 | Überstunden YYYY | Ist − Soll des aktuellen Jahres |
-| Übertrag Vorjahre | Kumulative Überstunden aller Jahre vor YYYY |
+| Übertrag Vorjahre | Kumulative Überstunden aller Jahre vor YYYY (nur wenn ≠ 0) |
 | **Überstundenkonto gesamt** | Überstunden YYYY + Übertrag Vorjahre |
+| Urlaubskonto | Anspruch, genommene Tage (abzgl. Vorjahresübertrag), Resturlaub |
+| Krankheitstage | Anzahl Krankheitstage im Jahr |
+| ArbZG-Verstöße | Nur in der realen Version: Verstoß-Statistik |
 
 Die Zeile "Überstundenkonto gesamt" ist **fett und farbig** hervorgehoben:
 - **Grün** bei positivem Saldo (Überstunden vorhanden)
 - **Rot** bei negativem Saldo (Minusstunden)
 
-Die Zeile "Übertrag Vorjahre" wird nur angezeigt, wenn der Übertrag ungleich 0 ist (also ab dem zweiten Jahr der Erfassung).
+### Reale Version
+
+Die reale Version zeigt zusätzlich die ArbZG-Verstoß-Statistik:
+
+![Zusammenfassung real mit ArbZG-Verstößen](images/summary_real_2026.png)
 
 ---
 
