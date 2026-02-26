@@ -43,10 +43,13 @@ def generate(
     employee_role: str = "",
     state: str = "BY",
     prior_overtime: float = 0.0,
+    vacation_carryover: int = 0,
 ) -> str:
     """Generate real Excel report. Returns output file path."""
     wb = Workbook()
     wb.remove(wb.active)
+
+    today = date.today()
 
     # Group days by month
     months: dict[int, list[DayInfo]] = {}
@@ -57,6 +60,8 @@ def generate(
     yearly_actual = 0.0
     yearly_target = 0.0
     yearly_violations: dict[str, int] = {}
+    yearly_vacation_used = 0
+    yearly_sick_days = 0
 
     for month_num in range(1, 13):
         month_days = months.get(month_num, [])
@@ -88,6 +93,8 @@ def generate(
         row = 7
         month_actual = 0.0
         month_target = 0.0
+        month_vacation = 0
+        month_sick = 0
 
         # Iterate all calendar days
         first_day = date(year, month_num, 1)
@@ -107,12 +114,22 @@ def generate(
 
             # Determine type and target
             day_type = _get_day_type(day_info, weekend, holiday)
-            if day_type in ("Urlaub", "Krank", "Gleittag"):
+            is_future = current > today
+
+            if is_future:
+                target = 0
+            elif day_type in ("Urlaub", "Krank", "Gleittag"):
                 target = HOURS_PER_DAY
             elif weekend or holiday:
                 target = 0
             else:
                 target = HOURS_PER_DAY
+
+            if not is_future:
+                if day_type == "Urlaub":
+                    month_vacation += 1
+                elif day_type == "Krank":
+                    month_sick += 1
 
             # Project & description (aggregate if multiple entries)
             project = ""
@@ -179,6 +196,8 @@ def generate(
 
         yearly_actual += month_actual
         yearly_target += month_target
+        yearly_vacation_used += month_vacation
+        yearly_sick_days += month_sick
 
         # Column widths
         widths = [12, 5, 10, 25, 35, 8, 8, 25]
@@ -191,6 +210,10 @@ def generate(
     ws_sum["A1"].font = Font(bold=True, size=14)
     ws_sum["A2"] = f"Mitarbeiter: {employee_name}"
     ws_sum["A3"] = f"Funktion: {employee_role}"
+
+    cutoff = min(date(year, 12, 31), today)
+    ws_sum["A4"] = f"Stand: {cutoff.strftime('%d.%m.%Y')}"
+    ws_sum["A4"].font = Font(italic=True, size=10)
 
     ws_sum["A5"] = "Gesamt Ist-Stunden:"
     ws_sum["B5"] = round(yearly_actual, 2)
@@ -215,10 +238,28 @@ def generate(
     ws_sum["B9"].number_format = "+0.00;-0.00;0.00"
     ws_sum["B9"].font = Font(bold=True, size=14, color="FF0000" if (prior_overtime + year_overtime) < 0 else "008000")
 
+    VACATION_DAYS = int(os.environ.get("VACATION_DAYS", "30"))
+    effective_vacation = yearly_vacation_used - vacation_carryover
+    ws_sum["A11"] = "Urlaubskonto:"
+    ws_sum["A11"].font = BOLD
+    ws_sum["A12"] = "Anspruch:"
+    ws_sum["B12"] = VACATION_DAYS
+    ws_sum["A13"] = "Genommen:"
+    ws_sum["B13"] = effective_vacation
+    if vacation_carryover:
+        ws_sum["C13"] = f"({vacation_carryover} Tage aus Vorjahr)"
+        ws_sum["C13"].font = Font(italic=True, size=9)
+    ws_sum["A14"] = "Resturlaub:"
+    ws_sum["B14"] = VACATION_DAYS - effective_vacation
+    ws_sum["B14"].font = Font(bold=True, size=12)
+
+    ws_sum["A16"] = "Krankheitstage:"
+    ws_sum["B16"] = yearly_sick_days
+
     if yearly_violations:
-        ws_sum["A11"] = "ArbZG-Verstöße:"
-        ws_sum["A11"].font = BOLD
-        r = 12
+        ws_sum["A18"] = "ArbZG-Verstöße:"
+        ws_sum["A18"].font = BOLD
+        r = 19
         for violation_type, count in sorted(yearly_violations.items()):
             ws_sum[f"A{r}"] = violation_type
             ws_sum[f"B{r}"] = count

@@ -101,6 +101,67 @@ def _calc_year_overtime(days: list[azg.DayInfo], state: str, hours_per_day: floa
     return total_actual - total_target
 
 
+def _calc_vacation_carryover(year: int, config: dict) -> int:
+    """Count vacation days at the start of `year` that belong to previous year's vacation period.
+
+    If there is a contiguous block of Urlaub days at the start of the year that connects
+    back to Urlaub days in December of the previous year, those January days count
+    against the previous year's vacation allowance.
+    """
+    start_date = date.fromisoformat(config["start_date"])
+    if year <= start_date.year:
+        return 0  # No carryover for the first year
+
+    # Check if there are Urlaub entries in December of previous year
+    prev_dec_entries = db.fetch_entries(date(year - 1, 12, 1), date(year - 1, 12, 31))
+    dec_dates_with_urlaub: set[date] = set()
+    by_date: dict[date, list] = defaultdict(list)
+    for e in prev_dec_entries:
+        by_date[e.start.date()].append(e)
+    for d, entries in by_date.items():
+        projects = {e.project_name.lower() for e in entries}
+        if any("urlaub" in p for p in projects):
+            dec_dates_with_urlaub.add(d)
+
+    if not dec_dates_with_urlaub:
+        return 0
+
+    # Check if Dec 31 has Urlaub (or last working day before it)
+    dec31 = date(year - 1, 12, 31)
+    # Walk backwards from Dec 31 to find the last non-weekend/non-holiday day
+    check = dec31
+    while check >= date(year - 1, 12, 20):
+        if not is_weekend(check) and not is_holiday(check, config["state"]):
+            break
+        check -= timedelta(days=1)
+
+    if check not in dec_dates_with_urlaub:
+        return 0  # Previous year doesn't end with Urlaub
+
+    # Count contiguous Urlaub days at start of current year
+    jan_entries = db.fetch_entries(date(year, 1, 1), date(year, 1, 31))
+    jan_by_date: dict[date, list] = defaultdict(list)
+    for e in jan_entries:
+        jan_by_date[e.start.date()].append(e)
+
+    carryover = 0
+    current = date(year, 1, 1)
+    while current.month == 1:
+        if is_weekend(current) or is_holiday(current, config["state"]):
+            current += timedelta(days=1)
+            continue
+        entries = jan_by_date.get(current, [])
+        if entries:
+            projects = {e.project_name.lower() for e in entries}
+            if any("urlaub" in p for p in projects):
+                carryover += 1
+                current += timedelta(days=1)
+                continue
+        break  # First non-Urlaub weekday ends the contiguous block
+
+    return carryover
+
+
 def _generate_year(year: int, config: dict, prior_overtime: float):
     """Generate both reports for a single year with carry-over from prior years."""
     state = config["state"]
@@ -109,6 +170,11 @@ def _generate_year(year: int, config: dict, prior_overtime: float):
     print(f"\nGenerating reports for {year} (State: {state})...")
     if prior_overtime != 0:
         print(f"  Carry-over from prior years: {prior_overtime:+.2f}h")
+
+    # Calculate vacation carryover from previous year
+    vacation_carryover = _calc_vacation_carryover(year, config)
+    if vacation_carryover:
+        print(f"  Vacation carryover from previous year: {vacation_carryover} days")
 
     days = build_day_infos(year, config)
 
@@ -129,6 +195,7 @@ def _generate_year(year: int, config: dict, prior_overtime: float):
         employee_role=config["employee_role"],
         state=state,
         prior_overtime=prior_overtime,
+        vacation_carryover=vacation_carryover,
     )
     print(f"  -> {real_path}")
 
@@ -163,6 +230,7 @@ def _generate_year(year: int, config: dict, prior_overtime: float):
         employee_role=config["employee_role"],
         state=state,
         prior_overtime=prior_overtime,
+        vacation_carryover=vacation_carryover,
     )
     print(f"  -> {office_path}")
 
