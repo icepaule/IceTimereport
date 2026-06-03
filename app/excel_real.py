@@ -118,7 +118,7 @@ def generate(
 
             if is_future:
                 target = 0
-            elif day_type in ("Urlaub", "Krank", "Gleittag"):
+            elif day_type in ("Urlaub", "Sonderurlaub", "Krank", "Gleittag"):
                 target = HOURS_PER_DAY
             elif weekend or holiday:
                 target = 0
@@ -172,7 +172,7 @@ def generate(
             elif weekend or holiday:
                 for col in range(1, 9):
                     ws.cell(row=row, column=col).fill = GRAY_FILL
-            elif day_type in ("Urlaub", "Krank", "Gleittag"):
+            elif day_type in ("Urlaub", "Sonderurlaub", "Krank", "Gleittag"):
                 for col in range(1, 9):
                     ws.cell(row=row, column=col).fill = YELLOW_FILL
 
@@ -288,6 +288,8 @@ def _get_day_type(day_info: DayInfo | None, weekend: bool, holiday: str | None) 
     if day_info and day_info.entries:
         projects = {e.project_name.lower() for e in day_info.entries}
         for p in projects:
+            if "sonderurlaub" in p:
+                return "Sonderurlaub"
             if "urlaub" in p:
                 return "Urlaub"
             if "krank" in p:

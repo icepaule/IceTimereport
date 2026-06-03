@@ -28,6 +28,8 @@ def _detect_day_type_from_entries(day_info: azg.DayInfo) -> str:
         return "Arbeit"
     projects = {e.project_name.lower() for e in day_info.entries}
     for p in projects:
+        if "sonderurlaub" in p:
+            return "Sonderurlaub"
         if "urlaub" in p:
             return "Urlaub"
         if "krank" in p:
@@ -88,7 +90,7 @@ def _calc_year_overtime(days: list[azg.DayInfo], state: str, hours_per_day: floa
             total_actual += d.actual_hours
             continue
         day_type = _detect_day_type_from_entries(d)
-        if day_type in ("Urlaub", "Krank"):
+        if day_type in ("Urlaub", "Sonderurlaub", "Krank"):
             total_actual += hours_per_day
             total_target += hours_per_day
         elif day_type == "Gleittag":
@@ -120,7 +122,7 @@ def _calc_vacation_carryover(year: int, config: dict) -> int:
         by_date[e.start.date()].append(e)
     for d, entries in by_date.items():
         projects = {e.project_name.lower() for e in entries}
-        if any("urlaub" in p for p in projects):
+        if any("urlaub" in p and "sonderurlaub" not in p for p in projects):
             dec_dates_with_urlaub.add(d)
 
     if not dec_dates_with_urlaub:
@@ -153,7 +155,7 @@ def _calc_vacation_carryover(year: int, config: dict) -> int:
         entries = jan_by_date.get(current, [])
         if entries:
             projects = {e.project_name.lower() for e in entries}
-            if any("urlaub" in p for p in projects):
+            if any("urlaub" in p and "sonderurlaub" not in p for p in projects):
                 carryover += 1
                 current += timedelta(days=1)
                 continue
@@ -203,8 +205,8 @@ def _generate_year(year: int, config: dict, prior_overtime: float):
     print("  Applying ArbZG corrections for office version...")
     corrected = azg.correct_for_office(days, state, hours_per_day=hours_per_day)
     # Compare working hours (exclude paid absence and overtime reduction days)
-    paid_absence = {"Urlaub", "Krank"}
-    non_work = {"Urlaub", "Krank", "Gleittag", "Samstag", "Sonntag", "Feiertag"}
+    paid_absence = {"Urlaub", "Sonderurlaub", "Krank"}
+    non_work = {"Urlaub", "Sonderurlaub", "Krank", "Gleittag", "Samstag", "Sonntag", "Feiertag"}
     total_work_orig = sum(
         d.actual_hours for d, c in zip(days, corrected)
         if d.actual_hours > 0 and c.day_type not in non_work
@@ -217,7 +219,7 @@ def _generate_year(year: int, config: dict, prior_overtime: float):
     gleittage = sum(1 for d in corrected if d.day_type == "Gleittag")
     print(f"  Working hours: {total_work_orig:.1f}h -> Corrected: {total_corr_work:.1f}h (delta: {total_corr_work - total_work_orig:.1f}h)")
     if paid_days:
-        print(f"  Paid absence (Urlaub/Krank): {paid_days} days ({paid_days * hours_per_day:.1f}h, Ist=Soll)")
+        print(f"  Paid absence (Urlaub/Sonderurlaub/Krank): {paid_days} days ({paid_days * hours_per_day:.1f}h, Ist=Soll)")
     if gleittage:
         print(f"  Overtime reduction (Gleittag): {gleittage} days (-{gleittage * hours_per_day:.1f}h)")
 
@@ -307,7 +309,8 @@ def cmd_send_email(args):
                 total_actual += hours_per_day
                 total_target += hours_per_day
                 total_vacation_used += 1
-            elif day_type == "Krank":
+            elif day_type in ("Sonderurlaub", "Krank"):
+                # Paid absence, overtime neutral, NOT counted against annual leave
                 total_actual += hours_per_day
                 total_target += hours_per_day
             elif day_type == "Gleittag":

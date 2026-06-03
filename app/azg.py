@@ -29,7 +29,7 @@ class CorrectedDay:
     start_time: str  # "HH:MM"
     end_time: str    # "HH:MM"
     pause_minutes: int
-    day_type: str    # "Arbeit", "Wochenende", "Feiertag", "Urlaub", "Krank", "Gleittag"
+    day_type: str    # "Arbeit", "Wochenende", "Feiertag", "Urlaub", "Sonderurlaub", "Krank", "Gleittag"
     original_hours: float = 0.0
 
 
@@ -112,7 +112,7 @@ def correct_for_office(days: list[DayInfo], state: str = "BY", hours_per_day: fl
     - Weekend/holiday hours → carry over to next working day
     - Cap at 10h/day, excess → carry over
     - Generate plausible start/end/pause times
-    - Paid absence (Urlaub/Krank/Gleittag) → Ist = Soll = hours_per_day
+    - Paid absence (Urlaub/Sonderurlaub/Krank/Gleittag) → Ist = Soll = hours_per_day
     """
     corrected = []
     carry_over = 0.0
@@ -124,7 +124,7 @@ def correct_for_office(days: list[DayInfo], state: str = "BY", hours_per_day: fl
         # Determine day type from project names
         day_type = _detect_day_type(day)
 
-        if day_type in ("Urlaub", "Krank"):
+        if day_type in ("Urlaub", "Sonderurlaub", "Krank"):
             # Paid absence: Ist = Soll (no overtime change)
             start_time, end_time, pause_min = _generate_times(hours_per_day)
             corrected.append(CorrectedDay(
@@ -212,6 +212,8 @@ def _detect_day_type(day: DayInfo) -> str:
         return "Arbeit"
     project_names = {e.project_name.lower() for e in day.entries}
     for name in project_names:
+        if "sonderurlaub" in name:
+            return "Sonderurlaub"
         if "urlaub" in name:
             return "Urlaub"
         if "krank" in name:
